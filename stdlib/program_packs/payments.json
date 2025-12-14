@@ -1,0 +1,617 @@
+{
+  "programs": [
+    {
+      "name": "CreateWallet",
+      "description": "Create a wallet for an entity",
+      "inputs": [
+        {
+          "name": "wallet_id",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "owner_id",
+          "type": "string",
+          "required": true
+        }
+      ],
+      "context": [
+        {
+          "name": "owner",
+          "source": "ledger",
+          "path": "entities.{owner_id}"
+        }
+      ],
+      "evaluate": "CHIP:create_wallet",
+      "on_allow": [
+        {
+          "type": "create",
+          "entity_type": "wallets",
+          "id": {
+            "type": "path",
+            "path": [
+              "input",
+              "wallet_id"
+            ]
+          },
+          "data": {
+            "owner": "{owner_id}",
+            "balance": 0,
+            "frozen": false,
+            "created_at": "{now}"
+          }
+        },
+        {
+          "type": "emit",
+          "event": "wallet_created",
+          "data": {
+            "id": "{wallet_id}"
+          }
+        }
+      ],
+      "on_deny": [
+        {
+          "type": "emit",
+          "event": "wallet_creation_denied",
+          "data": {
+            "reason": "{proof.failed_gates}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Transfer",
+      "description": "Transfer funds between entities",
+      "inputs": [
+        {
+          "name": "from",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "to",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "amount",
+          "type": "number",
+          "required": true
+        }
+      ],
+      "context": [
+        {
+          "name": "sender",
+          "source": "ledger",
+          "path": "entities.{from}"
+        },
+        {
+          "name": "recipient",
+          "source": "ledger",
+          "path": "entities.{to}"
+        },
+        {
+          "name": "amount",
+          "source": "input",
+          "path": "amount"
+        }
+      ],
+      "evaluate": "CHIP:transfer",
+      "on_allow": [
+        {
+          "type": "decrement",
+          "target": "entities.{from}.balance",
+          "amount": {
+            "type": "path",
+            "path": [
+              "amount"
+            ]
+          }
+        },
+        {
+          "type": "increment",
+          "target": "entities.{to}.balance",
+          "amount": {
+            "type": "path",
+            "path": [
+              "amount"
+            ]
+          }
+        },
+        {
+          "type": "emit",
+          "event": "transfer_completed",
+          "data": {
+            "from": "{from}",
+            "to": "{to}",
+            "amount": "{amount}"
+          }
+        }
+      ],
+      "on_deny": [
+        {
+          "type": "emit",
+          "event": "transfer_denied",
+          "data": {
+            "reason": "{proof.failed_gates}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "TransferWithApproval",
+      "description": "Transfer with guardian approval",
+      "inputs": [
+        {
+          "name": "from",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "to",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "amount",
+          "type": "number",
+          "required": true
+        },
+        {
+          "name": "guardian_signature",
+          "type": "boolean",
+          "required": true
+        }
+      ],
+      "context": [
+        {
+          "name": "sender",
+          "source": "ledger",
+          "path": "entities.{from}"
+        },
+        {
+          "name": "amount",
+          "source": "input",
+          "path": "amount"
+        },
+        {
+          "name": "guardian_signature",
+          "source": "input",
+          "path": "guardian_signature"
+        }
+      ],
+      "evaluate": "CHIP:transfer_with_approval",
+      "on_allow": [
+        {
+          "type": "decrement",
+          "target": "entities.{from}.balance",
+          "amount": {
+            "type": "path",
+            "path": [
+              "amount"
+            ]
+          }
+        },
+        {
+          "type": "increment",
+          "target": "entities.{to}.balance",
+          "amount": {
+            "type": "path",
+            "path": [
+              "amount"
+            ]
+          }
+        },
+        {
+          "type": "emit",
+          "event": "approved_transfer",
+          "data": {
+            "from": "{from}",
+            "to": "{to}"
+          }
+        }
+      ],
+      "on_deny": [
+        {
+          "type": "emit",
+          "event": "approved_transfer_denied",
+          "data": {
+            "reason": "{proof.failed_gates}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "FreezeWallet",
+      "description": "Freeze a wallet (guardian action)",
+      "inputs": [
+        {
+          "name": "wallet_id",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "caller_id",
+          "type": "string",
+          "required": true
+        }
+      ],
+      "context": [
+        {
+          "name": "wallet",
+          "source": "ledger",
+          "path": "wallets.{wallet_id}"
+        },
+        {
+          "name": "wallet_owner",
+          "source": "ledger",
+          "path": "entities.{wallet.owner}"
+        },
+        {
+          "name": "caller_id",
+          "source": "input",
+          "path": "caller_id"
+        }
+      ],
+      "evaluate": "CHIP:freeze_wallet",
+      "on_allow": [
+        {
+          "type": "set",
+          "target": "wallets.{wallet_id}.frozen",
+          "value": {
+            "type": "literal",
+            "value": true
+          }
+        },
+        {
+          "type": "emit",
+          "event": "wallet_frozen",
+          "data": {
+            "id": "{wallet_id}"
+          }
+        }
+      ],
+      "on_deny": [
+        {
+          "type": "emit",
+          "event": "wallet_freeze_denied",
+          "data": {
+            "reason": "{proof.failed_gates}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "CreateEscrow",
+      "description": "Create and fund an escrow",
+      "inputs": [
+        {
+          "name": "escrow_id",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "buyer_id",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "seller_id",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "amount",
+          "type": "number",
+          "required": true
+        }
+      ],
+      "context": [
+        {
+          "name": "buyer",
+          "source": "ledger",
+          "path": "entities.{buyer_id}"
+        },
+        {
+          "name": "seller",
+          "source": "ledger",
+          "path": "entities.{seller_id}"
+        },
+        {
+          "name": "amount",
+          "source": "input",
+          "path": "amount"
+        }
+      ],
+      "evaluate": "CHIP:create_escrow",
+      "on_allow": [
+        {
+          "type": "decrement",
+          "target": "entities.{buyer_id}.balance",
+          "amount": {
+            "type": "path",
+            "path": [
+              "amount"
+            ]
+          }
+        },
+        {
+          "type": "create",
+          "entity_type": "escrows",
+          "id": {
+            "type": "path",
+            "path": [
+              "input",
+              "escrow_id"
+            ]
+          },
+          "data": {
+            "buyer": "{buyer_id}",
+            "seller": "{seller_id}",
+            "amount": "{amount}",
+            "status": "funded",
+            "created_at": "{now}"
+          }
+        },
+        {
+          "type": "emit",
+          "event": "escrow_created",
+          "data": {
+            "id": "{escrow_id}"
+          }
+        }
+      ],
+      "on_deny": [
+        {
+          "type": "emit",
+          "event": "escrow_creation_denied",
+          "data": {
+            "reason": "{proof.failed_gates}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "FundEscrow",
+      "description": "Fund a created escrow",
+      "inputs": [
+        {
+          "name": "escrow_id",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "caller_id",
+          "type": "string",
+          "required": true
+        }
+      ],
+      "context": [
+        {
+          "name": "escrow",
+          "source": "ledger",
+          "path": "escrows.{escrow_id}"
+        },
+        {
+          "name": "caller_id",
+          "source": "input",
+          "path": "caller_id"
+        }
+      ],
+      "evaluate": "CHIP:fund_escrow",
+      "on_allow": [
+        {
+          "type": "set",
+          "target": "escrows.{escrow_id}.status",
+          "value": {
+            "type": "literal",
+            "value": "funded"
+          }
+        },
+        {
+          "type": "emit",
+          "event": "escrow_funded",
+          "data": {
+            "id": "{escrow_id}"
+          }
+        }
+      ],
+      "on_deny": [
+        {
+          "type": "emit",
+          "event": "escrow_funding_denied",
+          "data": {
+            "reason": "{proof.failed_gates}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "ReleaseEscrow",
+      "description": "Release escrow funds to seller",
+      "inputs": [
+        {
+          "name": "escrow_id",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "caller_id",
+          "type": "string",
+          "required": true
+        }
+      ],
+      "context": [
+        {
+          "name": "escrow",
+          "source": "ledger",
+          "path": "escrows.{escrow_id}"
+        },
+        {
+          "name": "caller_id",
+          "source": "input",
+          "path": "caller_id"
+        }
+      ],
+      "evaluate": "CHIP:release_escrow",
+      "on_allow": [
+        {
+          "type": "increment",
+          "target": "entities.{escrow.seller}.balance",
+          "amount": {
+            "type": "path",
+            "path": [
+              "escrow",
+              "amount"
+            ]
+          }
+        },
+        {
+          "type": "set",
+          "target": "escrows.{escrow_id}.status",
+          "value": {
+            "type": "literal",
+            "value": "released"
+          }
+        },
+        {
+          "type": "emit",
+          "event": "escrow_released",
+          "data": {
+            "id": "{escrow_id}"
+          }
+        }
+      ],
+      "on_deny": [
+        {
+          "type": "emit",
+          "event": "escrow_release_denied",
+          "data": {
+            "reason": "{proof.failed_gates}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "RefundEscrow",
+      "description": "Refund escrow to buyer",
+      "inputs": [
+        {
+          "name": "escrow_id",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "seller_failed",
+          "type": "boolean",
+          "required": true
+        }
+      ],
+      "context": [
+        {
+          "name": "escrow",
+          "source": "ledger",
+          "path": "escrows.{escrow_id}"
+        },
+        {
+          "name": "seller_failed",
+          "source": "input",
+          "path": "seller_failed"
+        }
+      ],
+      "evaluate": "CHIP:refund_escrow",
+      "on_allow": [
+        {
+          "type": "increment",
+          "target": "entities.{escrow.buyer}.balance",
+          "amount": {
+            "type": "path",
+            "path": [
+              "escrow",
+              "amount"
+            ]
+          }
+        },
+        {
+          "type": "set",
+          "target": "escrows.{escrow_id}.status",
+          "value": {
+            "type": "literal",
+            "value": "refunded"
+          }
+        },
+        {
+          "type": "emit",
+          "event": "escrow_refunded",
+          "data": {
+            "id": "{escrow_id}"
+          }
+        }
+      ],
+      "on_deny": [
+        {
+          "type": "emit",
+          "event": "escrow_refund_denied",
+          "data": {
+            "reason": "{proof.failed_gates}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "DisputeEscrow",
+      "description": "Dispute an escrow",
+      "inputs": [
+        {
+          "name": "escrow_id",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "caller_id",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "reason",
+          "type": "string",
+          "required": true
+        }
+      ],
+      "context": [
+        {
+          "name": "escrow",
+          "source": "ledger",
+          "path": "escrows.{escrow_id}"
+        }
+      ],
+      "evaluate": "CHIP:dispute_escrow",
+      "on_allow": [
+        {
+          "type": "set",
+          "target": "escrows.{escrow_id}.status",
+          "value": {
+            "type": "literal",
+            "value": "disputed"
+          }
+        },
+        {
+          "type": "emit",
+          "event": "escrow_disputed",
+          "data": {
+            "id": "{escrow_id}"
+          }
+        }
+      ],
+      "on_deny": [
+        {
+          "type": "emit",
+          "event": "escrow_dispute_denied",
+          "data": {
+            "reason": "{proof.failed_gates}"
+          }
+        }
+      ]
+    }
+  ]
+}

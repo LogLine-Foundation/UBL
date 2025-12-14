@@ -19,7 +19,7 @@ async fn main() -> anyhow::Result<()> {
         .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
         .init();
 
-    info!("🚀 UBL Kernel 2.1.0 (Publication Final) Starting...");
+    info!("🚀 UBL Kernel 2.1.0 Starting...");
     let ledger = Arc::new(Ledger::new());
 
     let app = Router::new()

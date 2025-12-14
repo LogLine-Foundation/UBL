@@ -43,7 +43,7 @@ UBL’s goal is not “smarter automation”. It’s **auditable automation**.
 
 ### Trust Architecture features
 - **Isolation Barrier** endpoint to validate/normalize “untrusted input” into a typed envelope
-- Standard-library program packs (including `trust_programs.json`) to enforce
+- Standard-library program packs (organized by theme) to enforce
   - circuit breakers,
   - multisig approvals,
   - vendor allowlists,
@@ -100,16 +100,19 @@ ubl_core/
 │   └── ...
 ├── stdlib/
 │   └── program_packs/
-│       ├── trust_programs.json
-│       ├── programs_part1.json
-│       └── programs_part2.json
+│       ├── entities.json
+│       ├── agreements.json
+│       ├── payments.json
+│       ├── financial.json
+│       ├── reputation.json
+│       ├── workspaces.json
+│       └── trust.json
 ├── examples/
 │   └── trust/
 │       └── invoice_barrier.json
 └── docs/
     ├── UBL-Trust-Architecture.md
-    ├── TRUST_INTEGRATION.md
-    └── PUBLISHING.md
+    └── UBL-Trust-Architecture.docx
 ```
 
 ---
@@ -220,44 +223,74 @@ The barrier returns `validated_fields` (normalized) plus a deterministic `conten
 
 ## Standard Library Program Packs
 
-This repo ships program packs intended as **governance scaffolding**.
-They do **not** replace your business chips — they *wrap* them in trust controls.
+This repo ships program packs organized by theme. These are **governance scaffolding** that demonstrate UBL patterns — they do not replace your business logic, but show how to structure trust policies.
 
-Included packs:
-- `stdlib/program_packs/trust_programs.json` (trust & governance workflows)
-- `stdlib/program_packs/programs_part1.json`
-- `stdlib/program_packs/programs_part2.json`
+### Included Packs
 
-### What’s inside `trust_programs.json`
-Examples of included programs:
-- `TrustedTransfer`
-- `MultisigTransfer`
-- `VendorAllowlistAdd` / `VendorAllowlistRemove`
-- `SetCircuitBreaker`
-- `FreezeEntity` / `UnfreezeEntity`
+- **`entities.json`** - Entity lifecycle, freezing/unfreezing, guardian management
+- **`agreements.json`** - Agreement proposals, signing, activation, obligations
+- **`payments.json`** - Basic transfers, wallet management, escrow operations
+- **`financial.json`** - Credit requests, loan management, invoice processing, asset registry
+- **`reputation.json`** - Reputation updates, staking, slashing
+- **`workspaces.json`** - Workspace creation, shadow entity management
+- **`trust.json`** - Trust Architecture patterns (circuit breakers, shadow validation, multisig, capability gating)
 
-These programs encode “how trust is applied” at runtime — approvals, limits, allowlists, and escalation — without expanding the kernel’s trusted surface.
+### Registering Packs
 
-> Philosophy: **make trust policy a Chip/Program concern**, not a kernel fork.
+Programs reference chips by name using `evaluate: "CHIP:<name>"`. Register chips first, then programs:
+
+```bash
+# Start the server
+cargo run --release
+
+# Register packs (chips must be registered before programs that reference them)
+python3 scripts/register_pack.py stdlib/program_packs/entities.json
+python3 scripts/register_pack.py stdlib/program_packs/agreements.json
+python3 scripts/register_pack.py stdlib/program_packs/payments.json
+python3 scripts/register_pack.py stdlib/program_packs/financial.json
+python3 scripts/register_pack.py stdlib/program_packs/reputation.json
+python3 scripts/register_pack.py stdlib/program_packs/workspaces.json
+python3 scripts/register_pack.py stdlib/program_packs/trust.json
+```
+
+Programs use template interpolation (e.g., `{amount}`, `{entity_id}`, `{now}`) which is resolved deterministically at execution time and stored in `EffectRecord` for replayability.
 
 ---
 
-## Incorporating the Trust Architecture: Chip or Kernel?
+## Trust Architecture Integration
 
-**Answer: almost entirely as Chips + Programs.**
+The Trust Architecture is implemented primarily through **Chips and Programs**, not kernel modifications.
 
-Kernel changes should be rare and limited to:
-- deterministic hashing / canonicalization,
-- deterministic evaluation semantics,
-- signature primitives,
-- atomic persistence & concurrency.
+### Core Principles
 
-Everything else — including approvals, rate limits, circuit breakers, and “LLM output validation” — should be expressed as:
-- **Barrier → ValidatedData**
-- **Chips → decision policies**
-- **Programs → orchestration and governance effects**
+1. **Isolation Barrier** - Untrusted input is validated and normalized via `POST /barrier/process` before entering the system. This ensures data never becomes executable logic.
 
-This mirrors the Trust Architecture’s framing: trust is a *replayable computation* rather than a “belief”, and the boundary between untrusted text and trusted execution must be explicit.
+2. **Atomic Operations** - All effects apply atomically. Ledger commits are crash-safe. EffectRecords are chain-hashed and optionally signed.
+
+3. **Shadow Validation** - Anomaly detection through chips that check patterns (limits, counterparties, timing). Integrated into decision chips or wrapped in trusted programs.
+
+4. **Trajectory-Based Identity** - Trust accumulates through verifiable history. Chips gate capabilities based on thresholds and age using built-in functions like `age()`, `before()`, `after()`.
+
+5. **Circuit Breakers** - Rate limits and thresholds enforced via chips and ledger state. Built-in functions (`add`, `sub`, `time_bucket`) support threshold management.
+
+6. **Multi-Signature** - Two approaches:
+   - Program-level: store approvals in ledger, require `length(approvals) >= threshold`
+   - Cryptographic: use `verify_ed25519(pk_b64, msg, sig_b64)` built-in function
+
+### Implementation Pattern
+
+Kernel responsibilities are minimal:
+- Deterministic hashing/canonicalization (JCS)
+- Deterministic evaluation semantics
+- Signature primitives (Ed25519)
+- Atomic persistence & concurrency
+
+Everything else — approvals, rate limits, circuit breakers, LLM output validation — is expressed as:
+- **Barrier → ValidatedData** (typed, non-executable)
+- **Chips → decision policies** (pure boolean functions)
+- **Programs → orchestration and governance effects** (atomic state changes)
+
+See `examples/trust/` for implementation templates and `stdlib/program_packs/trust.json` for complete patterns.
 
 ---
 
@@ -283,21 +316,16 @@ This mirrors the Trust Architecture’s framing: trust is a *replayable computat
 
 ---
 
-## Publication Checklist
+## Documentation
 
-For a clean release:
-- [ ] Configure `UBL_API_KEY` (or front with your gateway)
-- [ ] Set Ed25519 keys if you want signed proofs/records
-- [ ] Add a CI build (optional)
-- [ ] Run smoke tests from `docs/PUBLISHING.md`
-- [ ] Publish tags/releases, and include this README + docs
+- **Trust Architecture Specification**: See `docs/UBL-Trust-Architecture.md` for the complete technical specification
+- **Examples**: See `examples/trust/` for Trust Architecture implementation patterns
 
 ---
 
 ## License
 
-Choose a license before publishing (MIT / Apache-2.0 recommended).
-Add `LICENSE` and update the Cargo package metadata accordingly.
+This project is dual-licensed under **MIT OR Apache-2.0**. See `LICENSE-MIT` and `LICENSE-APACHE` for details.
 
 ---
 

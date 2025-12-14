@@ -1,0 +1,315 @@
+{
+  "programs": [
+    {
+      "name": "CreateShadow",
+      "description": "Create a shadow entity for external platform",
+      "inputs": [
+        {
+          "name": "shadow_id",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "creator_id",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "external_id",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "platform",
+          "type": "string",
+          "required": true
+        }
+      ],
+      "context": [
+        {
+          "name": "creator",
+          "source": "ledger",
+          "path": "entities.{creator_id}"
+        },
+        {
+          "name": "external_id",
+          "source": "input",
+          "path": "external_id"
+        }
+      ],
+      "evaluate": "CHIP:create_shadow",
+      "on_allow": [
+        {
+          "type": "create",
+          "entity_type": "shadows",
+          "id": {
+            "type": "path",
+            "path": [
+              "input",
+              "shadow_id"
+            ]
+          },
+          "data": {
+            "creator": "{creator_id}",
+            "external_id": "{external_id}",
+            "platform": "{platform}",
+            "merged_to": null,
+            "created_at": "{now}"
+          }
+        },
+        {
+          "type": "emit",
+          "event": "shadow_created",
+          "data": {
+            "id": "{shadow_id}"
+          }
+        }
+      ],
+      "on_deny": [
+        {
+          "type": "emit",
+          "event": "shadow_creation_denied",
+          "data": {
+            "reason": "{proof.failed_gates}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "MergeShadow",
+      "description": "Merge shadow entity to real entity",
+      "inputs": [
+        {
+          "name": "shadow_id",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "real_entity_id",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "proof",
+          "type": "string",
+          "required": true
+        }
+      ],
+      "context": [
+        {
+          "name": "shadow",
+          "source": "ledger",
+          "path": "shadows.{shadow_id}"
+        },
+        {
+          "name": "real_entity",
+          "source": "ledger",
+          "path": "entities.{real_entity_id}"
+        }
+      ],
+      "evaluate": "CHIP:merge_shadow",
+      "on_allow": [
+        {
+          "type": "set",
+          "target": "shadows.{shadow_id}.merged_to",
+          "value": {
+            "type": "path",
+            "path": [
+              "input",
+              "real_entity_id"
+            ]
+          }
+        },
+        {
+          "type": "emit",
+          "event": "shadow_merged",
+          "data": {
+            "shadow": "{shadow_id}",
+            "entity": "{real_entity_id}"
+          }
+        }
+      ],
+      "on_deny": [
+        {
+          "type": "emit",
+          "event": "merge_denied",
+          "data": {
+            "reason": "{proof.failed_gates}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "CreateWorkspace",
+      "description": "Create a workspace",
+      "inputs": [
+        {
+          "name": "workspace_id",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "owner_id",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "required": true
+        }
+      ],
+      "context": [
+        {
+          "name": "owner",
+          "source": "ledger",
+          "path": "entities.{owner_id}"
+        }
+      ],
+      "evaluate": "CHIP:create_workspace",
+      "on_allow": [
+        {
+          "type": "create",
+          "entity_type": "workspaces",
+          "id": {
+            "type": "path",
+            "path": [
+              "input",
+              "workspace_id"
+            ]
+          },
+          "data": {
+            "owner": "{owner_id}",
+            "name": "{name}",
+            "status": "active",
+            "created_at": "{now}"
+          }
+        },
+        {
+          "type": "emit",
+          "event": "workspace_created",
+          "data": {
+            "id": "{workspace_id}"
+          }
+        }
+      ],
+      "on_deny": [
+        {
+          "type": "emit",
+          "event": "workspace_creation_denied",
+          "data": {
+            "reason": "{proof.failed_gates}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "ArchiveWorkspace",
+      "description": "Archive a workspace",
+      "inputs": [
+        {
+          "name": "workspace_id",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "caller_id",
+          "type": "string",
+          "required": true
+        }
+      ],
+      "context": [
+        {
+          "name": "workspace",
+          "source": "ledger",
+          "path": "workspaces.{workspace_id}"
+        },
+        {
+          "name": "caller_id",
+          "source": "input",
+          "path": "caller_id"
+        }
+      ],
+      "evaluate": "CHIP:archive_workspace",
+      "on_allow": [
+        {
+          "type": "set",
+          "target": "workspaces.{workspace_id}.status",
+          "value": {
+            "type": "literal",
+            "value": "archived"
+          }
+        },
+        {
+          "type": "emit",
+          "event": "workspace_archived",
+          "data": {
+            "id": "{workspace_id}"
+          }
+        }
+      ],
+      "on_deny": [
+        {
+          "type": "emit",
+          "event": "archive_denied",
+          "data": {
+            "reason": "{proof.failed_gates}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "ExportWorkspace",
+      "description": "Export workspace data",
+      "inputs": [
+        {
+          "name": "workspace_id",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "caller_id",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "format",
+          "type": "string",
+          "required": true
+        }
+      ],
+      "context": [
+        {
+          "name": "workspace",
+          "source": "ledger",
+          "path": "workspaces.{workspace_id}"
+        },
+        {
+          "name": "caller_id",
+          "source": "input",
+          "path": "caller_id"
+        }
+      ],
+      "evaluate": "CHIP:export_workspace",
+      "on_allow": [
+        {
+          "type": "emit",
+          "event": "workspace_exported",
+          "data": {
+            "id": "{workspace_id}",
+            "format": "{format}"
+          }
+        }
+      ],
+      "on_deny": [
+        {
+          "type": "emit",
+          "event": "export_denied",
+          "data": {
+            "reason": "{proof.failed_gates}"
+          }
+        }
+      ]
+    }
+  ]
+}

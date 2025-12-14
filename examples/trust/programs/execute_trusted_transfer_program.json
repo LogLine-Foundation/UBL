@@ -41,7 +41,7 @@
         "path": "amount"
       }
     ],
-    "evaluate": "<FILL_WITH_HASH_OF_trusted_transfer_chip>",
+    "evaluate": "CHIP:trusted_transfer",
     "on_allow": [
       {
         "type": "decrement",

@@ -7,7 +7,7 @@ Pack format accepted:
 - {"programs": [...], "chips": [...]}
 
 Usage:
-  python3 scripts/register_pack.py stdlib/program_packs/programs_part1.json
+  python3 scripts/register_pack.py stdlib/program_packs/entities.json
 
 Env:
   UBL_URL=http://localhost:8000

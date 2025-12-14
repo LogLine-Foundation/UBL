@@ -1,0 +1,748 @@
+{
+  "programs": [
+    {
+      "name": "RequestCredit",
+      "description": "Request a credit line",
+      "inputs": [
+        {
+          "name": "loan_id",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "borrower_id",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "amount",
+          "type": "number",
+          "required": true
+        }
+      ],
+      "context": [
+        {
+          "name": "borrower",
+          "source": "ledger",
+          "path": "entities.{borrower_id}"
+        }
+      ],
+      "evaluate": "CHIP:request_credit",
+      "on_allow": [
+        {
+          "type": "create",
+          "entity_type": "loans",
+          "id": {
+            "type": "path",
+            "path": [
+              "input",
+              "loan_id"
+            ]
+          },
+          "data": {
+            "borrower": "{borrower_id}",
+            "amount": "{amount}",
+            "status": "pending",
+            "created_at": "{now}"
+          }
+        },
+        {
+          "type": "emit",
+          "event": "credit_requested",
+          "data": {
+            "id": "{loan_id}"
+          }
+        }
+      ],
+      "on_deny": [
+        {
+          "type": "emit",
+          "event": "credit_request_denied",
+          "data": {
+            "reason": "{proof.failed_gates}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "ApproveCredit",
+      "description": "Approve a credit request",
+      "inputs": [
+        {
+          "name": "loan_id",
+          "type": "string",
+          "required": true
+        }
+      ],
+      "context": [
+        {
+          "name": "loan",
+          "source": "ledger",
+          "path": "loans.{loan_id}"
+        }
+      ],
+      "evaluate": "CHIP:approve_credit",
+      "on_allow": [
+        {
+          "type": "set",
+          "target": "loans.{loan_id}.status",
+          "value": {
+            "type": "literal",
+            "value": "approved"
+          }
+        },
+        {
+          "type": "emit",
+          "event": "credit_approved",
+          "data": {
+            "id": "{loan_id}"
+          }
+        }
+      ],
+      "on_deny": [
+        {
+          "type": "emit",
+          "event": "credit_approval_denied",
+          "data": {
+            "reason": "{proof.failed_gates}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "DisburseLoan",
+      "description": "Disburse approved loan funds",
+      "inputs": [
+        {
+          "name": "loan_id",
+          "type": "string",
+          "required": true
+        }
+      ],
+      "context": [
+        {
+          "name": "loan",
+          "source": "ledger",
+          "path": "loans.{loan_id}"
+        }
+      ],
+      "evaluate": "CHIP:disburse_loan",
+      "on_allow": [
+        {
+          "type": "increment",
+          "target": "entities.{loan.borrower}.balance",
+          "amount": {
+            "type": "path",
+            "path": [
+              "loan",
+              "amount"
+            ]
+          }
+        },
+        {
+          "type": "set",
+          "target": "loans.{loan_id}.status",
+          "value": {
+            "type": "literal",
+            "value": "active"
+          }
+        },
+        {
+          "type": "emit",
+          "event": "loan_disbursed",
+          "data": {
+            "id": "{loan_id}"
+          }
+        }
+      ],
+      "on_deny": [
+        {
+          "type": "emit",
+          "event": "disbursement_denied",
+          "data": {
+            "reason": "{proof.failed_gates}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "RepayLoan",
+      "description": "Make a loan repayment",
+      "inputs": [
+        {
+          "name": "loan_id",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "repayment_amount",
+          "type": "number",
+          "required": true
+        }
+      ],
+      "context": [
+        {
+          "name": "loan",
+          "source": "ledger",
+          "path": "loans.{loan_id}"
+        },
+        {
+          "name": "borrower",
+          "source": "ledger",
+          "path": "entities.{loan.borrower}"
+        },
+        {
+          "name": "repayment_amount",
+          "source": "input",
+          "path": "repayment_amount"
+        }
+      ],
+      "evaluate": "CHIP:repay_loan",
+      "on_allow": [
+        {
+          "type": "decrement",
+          "target": "entities.{loan.borrower}.balance",
+          "amount": {
+            "type": "path",
+            "path": [
+              "repayment_amount"
+            ]
+          }
+        },
+        {
+          "type": "decrement",
+          "target": "loans.{loan_id}.amount",
+          "amount": {
+            "type": "path",
+            "path": [
+              "repayment_amount"
+            ]
+          }
+        },
+        {
+          "type": "emit",
+          "event": "loan_repaid",
+          "data": {
+            "id": "{loan_id}"
+          }
+        }
+      ],
+      "on_deny": [
+        {
+          "type": "emit",
+          "event": "repayment_denied",
+          "data": {
+            "reason": "{proof.failed_gates}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "DefaultLoan",
+      "description": "Mark a loan as defaulted",
+      "inputs": [
+        {
+          "name": "loan_id",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "is_overdue",
+          "type": "boolean",
+          "required": true
+        }
+      ],
+      "context": [
+        {
+          "name": "loan",
+          "source": "ledger",
+          "path": "loans.{loan_id}"
+        },
+        {
+          "name": "is_overdue",
+          "source": "input",
+          "path": "is_overdue"
+        }
+      ],
+      "evaluate": "CHIP:default_loan",
+      "on_allow": [
+        {
+          "type": "set",
+          "target": "loans.{loan_id}.status",
+          "value": {
+            "type": "literal",
+            "value": "defaulted"
+          }
+        },
+        {
+          "type": "decrement",
+          "target": "entities.{loan.borrower}.reputation",
+          "amount": {
+            "type": "literal",
+            "value": 50
+          }
+        },
+        {
+          "type": "emit",
+          "event": "loan_defaulted",
+          "data": {
+            "id": "{loan_id}"
+          }
+        }
+      ],
+      "on_deny": [
+        {
+          "type": "emit",
+          "event": "default_denied",
+          "data": {
+            "reason": "{proof.failed_gates}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "RegisterAsset",
+      "description": "Register a new asset",
+      "inputs": [
+        {
+          "name": "asset_id",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "owner_id",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "asset_type",
+          "type": "string",
+          "required": true
+        }
+      ],
+      "context": [
+        {
+          "name": "owner",
+          "source": "ledger",
+          "path": "entities.{owner_id}"
+        }
+      ],
+      "evaluate": "CHIP:register_asset",
+      "on_allow": [
+        {
+          "type": "create",
+          "entity_type": "assets",
+          "id": {
+            "type": "path",
+            "path": [
+              "input",
+              "asset_id"
+            ]
+          },
+          "data": {
+            "owner": "{owner_id}",
+            "type": "{asset_type}",
+            "locked": false,
+            "created_at": "{now}"
+          }
+        },
+        {
+          "type": "emit",
+          "event": "asset_registered",
+          "data": {
+            "id": "{asset_id}"
+          }
+        }
+      ],
+      "on_deny": [
+        {
+          "type": "emit",
+          "event": "asset_registration_denied",
+          "data": {
+            "reason": "{proof.failed_gates}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "TransferAsset",
+      "description": "Transfer asset ownership",
+      "inputs": [
+        {
+          "name": "asset_id",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "caller_id",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "recipient_id",
+          "type": "string",
+          "required": true
+        }
+      ],
+      "context": [
+        {
+          "name": "asset",
+          "source": "ledger",
+          "path": "assets.{asset_id}"
+        },
+        {
+          "name": "caller_id",
+          "source": "input",
+          "path": "caller_id"
+        }
+      ],
+      "evaluate": "CHIP:transfer_asset",
+      "on_allow": [
+        {
+          "type": "set",
+          "target": "assets.{asset_id}.owner",
+          "value": {
+            "type": "path",
+            "path": [
+              "input",
+              "recipient_id"
+            ]
+          }
+        },
+        {
+          "type": "emit",
+          "event": "asset_transferred",
+          "data": {
+            "id": "{asset_id}"
+          }
+        }
+      ],
+      "on_deny": [
+        {
+          "type": "emit",
+          "event": "asset_transfer_denied",
+          "data": {
+            "reason": "{proof.failed_gates}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "LockAsset",
+      "description": "Lock an asset",
+      "inputs": [
+        {
+          "name": "asset_id",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "caller_id",
+          "type": "string",
+          "required": true
+        }
+      ],
+      "context": [
+        {
+          "name": "asset",
+          "source": "ledger",
+          "path": "assets.{asset_id}"
+        },
+        {
+          "name": "caller_id",
+          "source": "input",
+          "path": "caller_id"
+        }
+      ],
+      "evaluate": "CHIP:lock_asset",
+      "on_allow": [
+        {
+          "type": "set",
+          "target": "assets.{asset_id}.locked",
+          "value": {
+            "type": "literal",
+            "value": true
+          }
+        },
+        {
+          "type": "emit",
+          "event": "asset_locked",
+          "data": {
+            "id": "{asset_id}"
+          }
+        }
+      ],
+      "on_deny": [
+        {
+          "type": "emit",
+          "event": "asset_lock_denied",
+          "data": {
+            "reason": "{proof.failed_gates}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "UnlockAsset",
+      "description": "Unlock an asset",
+      "inputs": [
+        {
+          "name": "asset_id",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "caller_id",
+          "type": "string",
+          "required": true
+        }
+      ],
+      "context": [
+        {
+          "name": "asset",
+          "source": "ledger",
+          "path": "assets.{asset_id}"
+        },
+        {
+          "name": "caller_id",
+          "source": "input",
+          "path": "caller_id"
+        }
+      ],
+      "evaluate": "CHIP:unlock_asset",
+      "on_allow": [
+        {
+          "type": "set",
+          "target": "assets.{asset_id}.locked",
+          "value": {
+            "type": "literal",
+            "value": false
+          }
+        },
+        {
+          "type": "emit",
+          "event": "asset_unlocked",
+          "data": {
+            "id": "{asset_id}"
+          }
+        }
+      ],
+      "on_deny": [
+        {
+          "type": "emit",
+          "event": "asset_unlock_denied",
+          "data": {
+            "reason": "{proof.failed_gates}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "CreateInvoice",
+      "description": "Create an invoice",
+      "inputs": [
+        {
+          "name": "invoice_id",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "issuer_id",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "recipient_id",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "amount",
+          "type": "number",
+          "required": true
+        }
+      ],
+      "context": [
+        {
+          "name": "issuer",
+          "source": "ledger",
+          "path": "entities.{issuer_id}"
+        }
+      ],
+      "evaluate": "CHIP:create_invoice",
+      "on_allow": [
+        {
+          "type": "create",
+          "entity_type": "invoices",
+          "id": {
+            "type": "path",
+            "path": [
+              "input",
+              "invoice_id"
+            ]
+          },
+          "data": {
+            "issuer": "{issuer_id}",
+            "recipient": "{recipient_id}",
+            "amount": "{amount}",
+            "status": "pending",
+            "created_at": "{now}"
+          }
+        },
+        {
+          "type": "emit",
+          "event": "invoice_created",
+          "data": {
+            "id": "{invoice_id}"
+          }
+        }
+      ],
+      "on_deny": [
+        {
+          "type": "emit",
+          "event": "invoice_creation_denied",
+          "data": {
+            "reason": "{proof.failed_gates}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "PayInvoice",
+      "description": "Pay an invoice",
+      "inputs": [
+        {
+          "name": "invoice_id",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "payer_id",
+          "type": "string",
+          "required": true
+        }
+      ],
+      "context": [
+        {
+          "name": "invoice",
+          "source": "ledger",
+          "path": "invoices.{invoice_id}"
+        },
+        {
+          "name": "payer",
+          "source": "ledger",
+          "path": "entities.{payer_id}"
+        }
+      ],
+      "evaluate": "CHIP:pay_invoice",
+      "on_allow": [
+        {
+          "type": "decrement",
+          "target": "entities.{payer_id}.balance",
+          "amount": {
+            "type": "path",
+            "path": [
+              "invoice",
+              "amount"
+            ]
+          }
+        },
+        {
+          "type": "increment",
+          "target": "entities.{invoice.issuer}.balance",
+          "amount": {
+            "type": "path",
+            "path": [
+              "invoice",
+              "amount"
+            ]
+          }
+        },
+        {
+          "type": "set",
+          "target": "invoices.{invoice_id}.status",
+          "value": {
+            "type": "literal",
+            "value": "paid"
+          }
+        },
+        {
+          "type": "emit",
+          "event": "invoice_paid",
+          "data": {
+            "id": "{invoice_id}"
+          }
+        }
+      ],
+      "on_deny": [
+        {
+          "type": "emit",
+          "event": "invoice_payment_denied",
+          "data": {
+            "reason": "{proof.failed_gates}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "DisputeInvoice",
+      "description": "Dispute an invoice",
+      "inputs": [
+        {
+          "name": "invoice_id",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "caller_id",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "reason",
+          "type": "string",
+          "required": true
+        }
+      ],
+      "context": [
+        {
+          "name": "invoice",
+          "source": "ledger",
+          "path": "invoices.{invoice_id}"
+        },
+        {
+          "name": "caller_id",
+          "source": "input",
+          "path": "caller_id"
+        }
+      ],
+      "evaluate": "CHIP:dispute_invoice",
+      "on_allow": [
+        {
+          "type": "set",
+          "target": "invoices.{invoice_id}.status",
+          "value": {
+            "type": "literal",
+            "value": "disputed"
+          }
+        },
+        {
+          "type": "emit",
+          "event": "invoice_disputed",
+          "data": {
+            "id": "{invoice_id}"
+          }
+        }
+      ],
+      "on_deny": [
+        {
+          "type": "emit",
+          "event": "invoice_dispute_denied",
+          "data": {
+            "reason": "{proof.failed_gates}"
+          }
+        }
+      ]
+    }
+  ]
+}

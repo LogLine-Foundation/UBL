@@ -1,29 +1,28 @@
 # Publishing Checklist
 
-## 1) Repo metadata
-- Update `Cargo.toml`:
-  - `repository = "..."`
-  - `homepage = "..."`
-  - `authors = [...]`
-  - `keywords = [...]`
-  - `categories = [...]`
-- Update `README.md` with project links.
+## Pre-Release
 
-## 2) Licenses
-This project is dual-licensed: **MIT OR Apache-2.0**.
-Ensure that matches your intended distribution.
+- [ ] Update `Cargo.toml` metadata (repository, homepage, authors, keywords)
+- [ ] Verify license files (MIT OR Apache-2.0)
+- [ ] Run `cargo fmt && cargo clippy && cargo test`
+- [ ] Review and update README.md
 
-## 3) Keys & production hardening
-- Set `UBL_API_KEY`
-- Run behind TLS / reverse proxy
-- Store signing keys securely (HSM or offline)
-- Enable metrics / tracing export if needed
+## Production Configuration
 
-## 4) Release steps
-- `cargo fmt && cargo clippy && cargo test`
-- Tag a release: `git tag v2.1.0 && git push --tags`
-- Create GitHub Release with `ubl_core_publication_final.zip` artifacts
+- [ ] Set `UBL_API_KEY` environment variable
+- [ ] Configure Ed25519 signing keys (optional but recommended)
+- [ ] Deploy behind TLS/reverse proxy
+- [ ] Store signing keys securely (HSM or offline storage)
+- [ ] Enable structured logging/tracing export if needed
 
-## 5) Crates.io (optional)
-- Ensure `name` is available
-- `cargo publish`
+## Release
+
+- [ ] Tag release: `git tag v2.1.0 && git push --tags`
+- [ ] Create GitHub Release with release notes
+- [ ] Attach build artifacts if needed
+
+## Optional: Crates.io
+
+- [ ] Verify package name availability
+- [ ] Run `cargo publish --dry-run`
+- [ ] Publish: `cargo publish`

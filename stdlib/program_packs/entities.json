@@ -1,0 +1,395 @@
+{
+  "programs": [
+    {
+      "name": "CreateEntity",
+      "description": "Create a new entity with guardian supervision",
+      "inputs": [
+        {
+          "name": "entity_id",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "guardian_id",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "entity_type",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "required": true
+        }
+      ],
+      "context": [
+        {
+          "name": "guardian",
+          "source": "ledger",
+          "path": "entities.{guardian_id}"
+        },
+        {
+          "name": "entity_type",
+          "source": "input",
+          "path": "entity_type"
+        }
+      ],
+      "evaluate": "CHIP:create_entity",
+      "on_allow": [
+        {
+          "type": "create",
+          "entity_type": "entities",
+          "id": {
+            "type": "path",
+            "path": [
+              "input",
+              "entity_id"
+            ]
+          },
+          "data": {
+            "type": "{entity_type}",
+            "name": "{name}",
+            "guardian": "{guardian_id}",
+            "frozen": false,
+            "balance": 0,
+            "reputation": 0,
+            "pending_obligations": 0,
+            "completed_agreements": 0,
+            "created_at": "{now}"
+          }
+        },
+        {
+          "type": "emit",
+          "event": "entity_created",
+          "data": {
+            "id": "{entity_id}",
+            "type": "{entity_type}"
+          }
+        }
+      ],
+      "on_deny": [
+        {
+          "type": "emit",
+          "event": "entity_creation_denied",
+          "data": {
+            "reason": "{proof.failed_gates}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "FreezeEntity",
+      "description": "Freeze an entity (guardian action)",
+      "inputs": [
+        {
+          "name": "entity_id",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "caller_id",
+          "type": "string",
+          "required": true
+        }
+      ],
+      "context": [
+        {
+          "name": "entity",
+          "source": "ledger",
+          "path": "entities.{entity_id}"
+        },
+        {
+          "name": "caller_id",
+          "source": "input",
+          "path": "caller_id"
+        }
+      ],
+      "evaluate": "CHIP:freeze_entity",
+      "on_allow": [
+        {
+          "type": "set",
+          "target": "entities.{entity_id}.frozen",
+          "value": {
+            "type": "literal",
+            "value": true
+          }
+        },
+        {
+          "type": "emit",
+          "event": "entity_frozen",
+          "data": {
+            "id": "{entity_id}"
+          }
+        }
+      ],
+      "on_deny": [
+        {
+          "type": "emit",
+          "event": "freeze_denied",
+          "data": {
+            "reason": "{proof.failed_gates}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "UnfreezeEntity",
+      "description": "Unfreeze an entity (guardian action)",
+      "inputs": [
+        {
+          "name": "entity_id",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "caller_id",
+          "type": "string",
+          "required": true
+        }
+      ],
+      "context": [
+        {
+          "name": "entity",
+          "source": "ledger",
+          "path": "entities.{entity_id}"
+        },
+        {
+          "name": "caller_id",
+          "source": "input",
+          "path": "caller_id"
+        }
+      ],
+      "evaluate": "CHIP:unfreeze_entity",
+      "on_allow": [
+        {
+          "type": "set",
+          "target": "entities.{entity_id}.frozen",
+          "value": {
+            "type": "literal",
+            "value": false
+          }
+        },
+        {
+          "type": "emit",
+          "event": "entity_unfrozen",
+          "data": {
+            "id": "{entity_id}"
+          }
+        }
+      ],
+      "on_deny": [
+        {
+          "type": "emit",
+          "event": "unfreeze_denied",
+          "data": {
+            "reason": "{proof.failed_gates}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "BindGuardian",
+      "description": "Bind a guardian to an agent",
+      "inputs": [
+        {
+          "name": "agent_id",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "guardian_id",
+          "type": "string",
+          "required": true
+        }
+      ],
+      "context": [
+        {
+          "name": "agent",
+          "source": "ledger",
+          "path": "entities.{agent_id}"
+        },
+        {
+          "name": "guardian",
+          "source": "ledger",
+          "path": "entities.{guardian_id}"
+        }
+      ],
+      "evaluate": "CHIP:bind_guardian",
+      "on_allow": [
+        {
+          "type": "set",
+          "target": "entities.{agent_id}.guardian",
+          "value": {
+            "type": "literal",
+            "value": "{guardian_id}"
+          }
+        },
+        {
+          "type": "increment",
+          "target": "entities.{guardian_id}.bound_count",
+          "amount": {
+            "type": "literal",
+            "value": 1
+          }
+        },
+        {
+          "type": "emit",
+          "event": "guardian_bound",
+          "data": {
+            "agent": "{agent_id}",
+            "guardian": "{guardian_id}"
+          }
+        }
+      ],
+      "on_deny": [
+        {
+          "type": "emit",
+          "event": "binding_denied",
+          "data": {
+            "reason": "{proof.failed_gates}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "UnbindGuardian",
+      "description": "Unbind guardian from agent (freezes agent)",
+      "inputs": [
+        {
+          "name": "agent_id",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "caller_id",
+          "type": "string",
+          "required": true
+        }
+      ],
+      "context": [
+        {
+          "name": "agent",
+          "source": "ledger",
+          "path": "entities.{agent_id}"
+        },
+        {
+          "name": "caller_id",
+          "source": "input",
+          "path": "caller_id"
+        }
+      ],
+      "evaluate": "CHIP:unbind_guardian",
+      "on_allow": [
+        {
+          "type": "set",
+          "target": "entities.{agent_id}.guardian",
+          "value": {
+            "type": "literal",
+            "value": null
+          }
+        },
+        {
+          "type": "set",
+          "target": "entities.{agent_id}.frozen",
+          "value": {
+            "type": "literal",
+            "value": true
+          }
+        },
+        {
+          "type": "emit",
+          "event": "guardian_unbound",
+          "data": {
+            "agent": "{agent_id}"
+          }
+        }
+      ],
+      "on_deny": [
+        {
+          "type": "emit",
+          "event": "unbinding_denied",
+          "data": {
+            "reason": "{proof.failed_gates}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "TransferGuardianship",
+      "description": "Transfer guardianship to a new guardian",
+      "inputs": [
+        {
+          "name": "agent_id",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "new_guardian_id",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "caller_id",
+          "type": "string",
+          "required": true
+        }
+      ],
+      "context": [
+        {
+          "name": "agent",
+          "source": "ledger",
+          "path": "entities.{agent_id}"
+        },
+        {
+          "name": "new_guardian",
+          "source": "ledger",
+          "path": "entities.{new_guardian_id}"
+        },
+        {
+          "name": "caller_id",
+          "source": "input",
+          "path": "caller_id"
+        }
+      ],
+      "evaluate": "CHIP:transfer_guardianship",
+      "on_allow": [
+        {
+          "type": "set",
+          "target": "entities.{agent_id}.guardian",
+          "value": {
+            "type": "literal",
+            "value": "{new_guardian_id}"
+          }
+        },
+        {
+          "type": "increment",
+          "target": "entities.{new_guardian_id}.bound_count",
+          "amount": {
+            "type": "literal",
+            "value": 1
+          }
+        },
+        {
+          "type": "emit",
+          "event": "guardianship_transferred",
+          "data": {
+            "agent": "{agent_id}",
+            "to": "{new_guardian_id}"
+          }
+        }
+      ],
+      "on_deny": [
+        {
+          "type": "emit",
+          "event": "transfer_denied",
+          "data": {
+            "reason": "{proof.failed_gates}"
+          }
+        }
+      ]
+    }
+  ]
+}

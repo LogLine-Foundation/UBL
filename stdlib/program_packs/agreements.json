@@ -1,0 +1,649 @@
+{
+  "programs": [
+    {
+      "name": "ProposeAgreement",
+      "description": "Propose a new agreement between parties",
+      "inputs": [
+        {
+          "name": "agreement_id",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "proposer_id",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "party_ids",
+          "type": "array",
+          "required": true
+        },
+        {
+          "name": "terms",
+          "type": "object",
+          "required": true
+        }
+      ],
+      "context": [
+        {
+          "name": "proposer",
+          "source": "ledger",
+          "path": "entities.{proposer_id}"
+        },
+        {
+          "name": "proposer_id",
+          "source": "input",
+          "path": "proposer_id"
+        },
+        {
+          "name": "party_ids",
+          "source": "input",
+          "path": "party_ids"
+        }
+      ],
+      "evaluate": "CHIP:propose_agreement",
+      "on_allow": [
+        {
+          "type": "create",
+          "entity_type": "agreements",
+          "id": {
+            "type": "path",
+            "path": [
+              "input",
+              "agreement_id"
+            ]
+          },
+          "data": {
+            "parties": "{party_ids}",
+            "terms": "{terms}",
+            "status": "proposed",
+            "signatures": [
+              "{proposer_id}"
+            ],
+            "pending_obligations": 0,
+            "created_at": "{now}"
+          }
+        },
+        {
+          "type": "emit",
+          "event": "agreement_proposed",
+          "data": {
+            "id": "{agreement_id}"
+          }
+        }
+      ],
+      "on_deny": [
+        {
+          "type": "emit",
+          "event": "proposal_denied",
+          "data": {
+            "reason": "{proof.failed_gates}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "SignAgreement",
+      "description": "Sign an agreement",
+      "inputs": [
+        {
+          "name": "agreement_id",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "signer_id",
+          "type": "string",
+          "required": true
+        }
+      ],
+      "context": [
+        {
+          "name": "agreement",
+          "source": "ledger",
+          "path": "agreements.{agreement_id}"
+        },
+        {
+          "name": "signer_id",
+          "source": "input",
+          "path": "signer_id"
+        }
+      ],
+      "evaluate": "CHIP:sign_agreement",
+      "on_allow": [
+        {
+          "type": "append",
+          "target": "agreements.{agreement_id}.signatures",
+          "value": {
+            "type": "path",
+            "path": [
+              "input",
+              "signer_id"
+            ]
+          }
+        },
+        {
+          "type": "emit",
+          "event": "agreement_signed",
+          "data": {
+            "id": "{agreement_id}",
+            "by": "{signer_id}"
+          }
+        }
+      ],
+      "on_deny": [
+        {
+          "type": "emit",
+          "event": "signing_denied",
+          "data": {
+            "reason": "{proof.failed_gates}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "ActivateAgreement",
+      "description": "Activate an agreement after all signatures",
+      "inputs": [
+        {
+          "name": "agreement_id",
+          "type": "string",
+          "required": true
+        }
+      ],
+      "context": [
+        {
+          "name": "agreement",
+          "source": "ledger",
+          "path": "agreements.{agreement_id}"
+        }
+      ],
+      "evaluate": "CHIP:activate_agreement",
+      "on_allow": [
+        {
+          "type": "set",
+          "target": "agreements.{agreement_id}.status",
+          "value": {
+            "type": "literal",
+            "value": "active"
+          }
+        },
+        {
+          "type": "emit",
+          "event": "agreement_activated",
+          "data": {
+            "id": "{agreement_id}"
+          }
+        }
+      ],
+      "on_deny": [
+        {
+          "type": "emit",
+          "event": "activation_denied",
+          "data": {
+            "reason": "{proof.failed_gates}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "CompleteAgreement",
+      "description": "Complete an agreement after all obligations fulfilled",
+      "inputs": [
+        {
+          "name": "agreement_id",
+          "type": "string",
+          "required": true
+        }
+      ],
+      "context": [
+        {
+          "name": "agreement",
+          "source": "ledger",
+          "path": "agreements.{agreement_id}"
+        }
+      ],
+      "evaluate": "CHIP:complete_agreement",
+      "on_allow": [
+        {
+          "type": "set",
+          "target": "agreements.{agreement_id}.status",
+          "value": {
+            "type": "literal",
+            "value": "completed"
+          }
+        },
+        {
+          "type": "emit",
+          "event": "agreement_completed",
+          "data": {
+            "id": "{agreement_id}"
+          }
+        }
+      ],
+      "on_deny": [
+        {
+          "type": "emit",
+          "event": "completion_denied",
+          "data": {
+            "reason": "{proof.failed_gates}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "TerminateAgreement",
+      "description": "Terminate an agreement",
+      "inputs": [
+        {
+          "name": "agreement_id",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "caller_id",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "reason",
+          "type": "string",
+          "required": true
+        }
+      ],
+      "context": [
+        {
+          "name": "agreement",
+          "source": "ledger",
+          "path": "agreements.{agreement_id}"
+        },
+        {
+          "name": "caller_id",
+          "source": "input",
+          "path": "caller_id"
+        }
+      ],
+      "evaluate": "CHIP:terminate_agreement",
+      "on_allow": [
+        {
+          "type": "set",
+          "target": "agreements.{agreement_id}.status",
+          "value": {
+            "type": "literal",
+            "value": "terminated"
+          }
+        },
+        {
+          "type": "emit",
+          "event": "agreement_terminated",
+          "data": {
+            "id": "{agreement_id}"
+          }
+        }
+      ],
+      "on_deny": [
+        {
+          "type": "emit",
+          "event": "termination_denied",
+          "data": {
+            "reason": "{proof.failed_gates}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "DisputeAgreement",
+      "description": "Dispute an active agreement",
+      "inputs": [
+        {
+          "name": "agreement_id",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "caller_id",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "reason",
+          "type": "string",
+          "required": true
+        }
+      ],
+      "context": [
+        {
+          "name": "agreement",
+          "source": "ledger",
+          "path": "agreements.{agreement_id}"
+        },
+        {
+          "name": "caller_id",
+          "source": "input",
+          "path": "caller_id"
+        }
+      ],
+      "evaluate": "CHIP:dispute_agreement",
+      "on_allow": [
+        {
+          "type": "set",
+          "target": "agreements.{agreement_id}.status",
+          "value": {
+            "type": "literal",
+            "value": "disputed"
+          }
+        },
+        {
+          "type": "emit",
+          "event": "agreement_disputed",
+          "data": {
+            "id": "{agreement_id}"
+          }
+        }
+      ],
+      "on_deny": [
+        {
+          "type": "emit",
+          "event": "dispute_denied",
+          "data": {
+            "reason": "{proof.failed_gates}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "CreateObligation",
+      "description": "Create an obligation under an agreement",
+      "inputs": [
+        {
+          "name": "obligation_id",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "agreement_id",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "debtor_id",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "creditor_id",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "description",
+          "type": "string",
+          "required": true
+        }
+      ],
+      "context": [
+        {
+          "name": "agreement",
+          "source": "ledger",
+          "path": "agreements.{agreement_id}"
+        },
+        {
+          "name": "debtor_id",
+          "source": "input",
+          "path": "debtor_id"
+        }
+      ],
+      "evaluate": "CHIP:create_obligation",
+      "on_allow": [
+        {
+          "type": "create",
+          "entity_type": "obligations",
+          "id": {
+            "type": "path",
+            "path": [
+              "input",
+              "obligation_id"
+            ]
+          },
+          "data": {
+            "agreement_id": "{agreement_id}",
+            "debtor": "{debtor_id}",
+            "creditor": "{creditor_id}",
+            "description": "{description}",
+            "status": "pending",
+            "created_at": "{now}"
+          }
+        },
+        {
+          "type": "increment",
+          "target": "agreements.{agreement_id}.pending_obligations",
+          "amount": {
+            "type": "literal",
+            "value": 1
+          }
+        },
+        {
+          "type": "increment",
+          "target": "entities.{debtor_id}.pending_obligations",
+          "amount": {
+            "type": "literal",
+            "value": 1
+          }
+        },
+        {
+          "type": "emit",
+          "event": "obligation_created",
+          "data": {
+            "id": "{obligation_id}"
+          }
+        }
+      ],
+      "on_deny": [
+        {
+          "type": "emit",
+          "event": "obligation_creation_denied",
+          "data": {
+            "reason": "{proof.failed_gates}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "FulfillObligation",
+      "description": "Fulfill an obligation",
+      "inputs": [
+        {
+          "name": "obligation_id",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "caller_id",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "evidence",
+          "type": "object",
+          "required": true
+        }
+      ],
+      "context": [
+        {
+          "name": "obligation",
+          "source": "ledger",
+          "path": "obligations.{obligation_id}"
+        },
+        {
+          "name": "caller_id",
+          "source": "input",
+          "path": "caller_id"
+        }
+      ],
+      "evaluate": "CHIP:fulfill_obligation",
+      "on_allow": [
+        {
+          "type": "set",
+          "target": "obligations.{obligation_id}.status",
+          "value": {
+            "type": "literal",
+            "value": "fulfilled"
+          }
+        },
+        {
+          "type": "decrement",
+          "target": "entities.{obligation.debtor}.pending_obligations",
+          "amount": {
+            "type": "literal",
+            "value": 1
+          }
+        },
+        {
+          "type": "increment",
+          "target": "entities.{obligation.debtor}.completed_agreements",
+          "amount": {
+            "type": "literal",
+            "value": 1
+          }
+        },
+        {
+          "type": "emit",
+          "event": "obligation_fulfilled",
+          "data": {
+            "id": "{obligation_id}"
+          }
+        }
+      ],
+      "on_deny": [
+        {
+          "type": "emit",
+          "event": "fulfillment_denied",
+          "data": {
+            "reason": "{proof.failed_gates}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "VerifyFulfillment",
+      "description": "Verify obligation fulfillment",
+      "inputs": [
+        {
+          "name": "obligation_id",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "caller_id",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "approved",
+          "type": "boolean",
+          "required": true
+        }
+      ],
+      "context": [
+        {
+          "name": "obligation",
+          "source": "ledger",
+          "path": "obligations.{obligation_id}"
+        },
+        {
+          "name": "caller_id",
+          "source": "input",
+          "path": "caller_id"
+        }
+      ],
+      "evaluate": "CHIP:verify_fulfillment",
+      "on_allow": [
+        {
+          "type": "set",
+          "target": "obligations.{obligation_id}.verified",
+          "value": {
+            "type": "literal",
+            "value": true
+          }
+        },
+        {
+          "type": "emit",
+          "event": "fulfillment_verified",
+          "data": {
+            "id": "{obligation_id}"
+          }
+        }
+      ],
+      "on_deny": [
+        {
+          "type": "emit",
+          "event": "verification_denied",
+          "data": {
+            "reason": "{proof.failed_gates}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "DisputeObligation",
+      "description": "Dispute an obligation",
+      "inputs": [
+        {
+          "name": "obligation_id",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "caller_id",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "reason",
+          "type": "string",
+          "required": true
+        }
+      ],
+      "context": [
+        {
+          "name": "obligation",
+          "source": "ledger",
+          "path": "obligations.{obligation_id}"
+        },
+        {
+          "name": "caller_id",
+          "source": "input",
+          "path": "caller_id"
+        }
+      ],
+      "evaluate": "CHIP:dispute_obligation",
+      "on_allow": [
+        {
+          "type": "set",
+          "target": "obligations.{obligation_id}.status",
+          "value": {
+            "type": "literal",
+            "value": "disputed"
+          }
+        },
+        {
+          "type": "emit",
+          "event": "obligation_disputed",
+          "data": {
+            "id": "{obligation_id}"
+          }
+        }
+      ],
+      "on_deny": [
+        {
+          "type": "emit",
+          "event": "dispute_denied",
+          "data": {
+            "reason": "{proof.failed_gates}"
+          }
+        }
+      ]
+    }
+  ]
+}

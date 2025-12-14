@@ -1,0 +1,190 @@
+{
+  "programs": [
+    {
+      "name": "UpdateReputation",
+      "description": "Update entity reputation (system/arbiter/admin only)",
+      "inputs": [
+        {
+          "name": "entity_id",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "caller_id",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "change",
+          "type": "number",
+          "required": true
+        }
+      ],
+      "context": [
+        {
+          "name": "caller",
+          "source": "ledger",
+          "path": "entities.{caller_id}"
+        },
+        {
+          "name": "change",
+          "source": "input",
+          "path": "change"
+        }
+      ],
+      "evaluate": "CHIP:update_reputation",
+      "on_allow": [
+        {
+          "type": "increment",
+          "target": "entities.{entity_id}.reputation",
+          "amount": {
+            "type": "path",
+            "path": [
+              "change"
+            ]
+          }
+        },
+        {
+          "type": "emit",
+          "event": "reputation_updated",
+          "data": {
+            "id": "{entity_id}"
+          }
+        }
+      ],
+      "on_deny": [
+        {
+          "type": "emit",
+          "event": "reputation_update_denied",
+          "data": {
+            "reason": "{proof.failed_gates}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "StakeReputation",
+      "description": "Stake reputation for commitment",
+      "inputs": [
+        {
+          "name": "entity_id",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "stake_amount",
+          "type": "number",
+          "required": true
+        }
+      ],
+      "context": [
+        {
+          "name": "entity",
+          "source": "ledger",
+          "path": "entities.{entity_id}"
+        },
+        {
+          "name": "stake_amount",
+          "source": "input",
+          "path": "stake_amount"
+        }
+      ],
+      "evaluate": "CHIP:stake_reputation",
+      "on_allow": [
+        {
+          "type": "decrement",
+          "target": "entities.{entity_id}.reputation",
+          "amount": {
+            "type": "path",
+            "path": [
+              "stake_amount"
+            ]
+          }
+        },
+        {
+          "type": "increment",
+          "target": "entities.{entity_id}.staked_reputation",
+          "amount": {
+            "type": "path",
+            "path": [
+              "stake_amount"
+            ]
+          }
+        },
+        {
+          "type": "emit",
+          "event": "reputation_staked",
+          "data": {
+            "id": "{entity_id}"
+          }
+        }
+      ],
+      "on_deny": [
+        {
+          "type": "emit",
+          "event": "stake_denied",
+          "data": {
+            "reason": "{proof.failed_gates}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "SlashReputation",
+      "description": "Slash staked reputation as penalty",
+      "inputs": [
+        {
+          "name": "entity_id",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "slash_amount",
+          "type": "number",
+          "required": true
+        }
+      ],
+      "context": [
+        {
+          "name": "entity",
+          "source": "ledger",
+          "path": "entities.{entity_id}"
+        },
+        {
+          "name": "slash_amount",
+          "source": "input",
+          "path": "slash_amount"
+        }
+      ],
+      "evaluate": "CHIP:slash_reputation",
+      "on_allow": [
+        {
+          "type": "decrement",
+          "target": "entities.{entity_id}.staked_reputation",
+          "amount": {
+            "type": "path",
+            "path": [
+              "slash_amount"
+            ]
+          }
+        },
+        {
+          "type": "emit",
+          "event": "reputation_slashed",
+          "data": {
+            "id": "{entity_id}"
+          }
+        }
+      ],
+      "on_deny": [
+        {
+          "type": "emit",
+          "event": "slash_denied",
+          "data": {
+            "reason": "{proof.failed_gates}"
+          }
+        }
+      ]
+    }
+  ]
+}
