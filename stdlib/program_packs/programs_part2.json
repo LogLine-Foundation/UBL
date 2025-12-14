@@ -1,0 +1,374 @@
+{
+  "programs": [
+    {
+      "name": "DisputeEscrow",
+      "description": "Dispute an escrow",
+      "inputs": [
+        {"name": "escrow_id", "type": "string", "required": true},
+        {"name": "caller_id", "type": "string", "required": true},
+        {"name": "reason", "type": "string", "required": true}
+      ],
+      "context": [{"name": "escrow", "source": "ledger", "path": "escrows.{escrow_id}"}],
+      "evaluate": "CHIP:dispute_escrow",
+      "on_allow": [
+        {"type": "set", "target": "escrows.{escrow_id}.status", "value": {"type": "literal", "value": "disputed"}},
+        {"type": "emit", "event": "escrow_disputed", "data": {"id": "{escrow_id}"}}
+      ],
+      "on_deny": [{"type": "emit", "event": "escrow_dispute_denied", "data": {"reason": "{proof.failed_gates}"}}]
+    },
+    {
+      "name": "RequestCredit",
+      "description": "Request a credit line",
+      "inputs": [
+        {"name": "loan_id", "type": "string", "required": true},
+        {"name": "borrower_id", "type": "string", "required": true},
+        {"name": "amount", "type": "number", "required": true}
+      ],
+      "context": [{"name": "borrower", "source": "ledger", "path": "entities.{borrower_id}"}],
+      "evaluate": "CHIP:request_credit",
+      "on_allow": [
+        {"type": "create", "entity_type": "loans", "id": {"type": "path", "path": ["input", "loan_id"]}, "data": {"borrower": "{borrower_id}", "amount": "{amount}", "status": "pending", "created_at": "{now}"}},
+        {"type": "emit", "event": "credit_requested", "data": {"id": "{loan_id}"}}
+      ],
+      "on_deny": [{"type": "emit", "event": "credit_request_denied", "data": {"reason": "{proof.failed_gates}"}}]
+    },
+    {
+      "name": "ApproveCredit",
+      "description": "Approve a credit request",
+      "inputs": [{"name": "loan_id", "type": "string", "required": true}],
+      "context": [{"name": "loan", "source": "ledger", "path": "loans.{loan_id}"}],
+      "evaluate": "CHIP:approve_credit",
+      "on_allow": [
+        {"type": "set", "target": "loans.{loan_id}.status", "value": {"type": "literal", "value": "approved"}},
+        {"type": "emit", "event": "credit_approved", "data": {"id": "{loan_id}"}}
+      ],
+      "on_deny": [{"type": "emit", "event": "credit_approval_denied", "data": {"reason": "{proof.failed_gates}"}}]
+    },
+    {
+      "name": "DisburseLoan",
+      "description": "Disburse approved loan funds",
+      "inputs": [{"name": "loan_id", "type": "string", "required": true}],
+      "context": [{"name": "loan", "source": "ledger", "path": "loans.{loan_id}"}],
+      "evaluate": "CHIP:disburse_loan",
+      "on_allow": [
+        {"type": "increment", "target": "entities.{loan.borrower}.balance", "amount": {"type": "path", "path": ["loan", "amount"]}},
+        {"type": "set", "target": "loans.{loan_id}.status", "value": {"type": "literal", "value": "active"}},
+        {"type": "emit", "event": "loan_disbursed", "data": {"id": "{loan_id}"}}
+      ],
+      "on_deny": [{"type": "emit", "event": "disbursement_denied", "data": {"reason": "{proof.failed_gates}"}}]
+    },
+    {
+      "name": "RepayLoan",
+      "description": "Make a loan repayment",
+      "inputs": [
+        {"name": "loan_id", "type": "string", "required": true},
+        {"name": "repayment_amount", "type": "number", "required": true}
+      ],
+      "context": [
+        {"name": "loan", "source": "ledger", "path": "loans.{loan_id}"},
+        {"name": "borrower", "source": "ledger", "path": "entities.{loan.borrower}"},
+        {"name": "repayment_amount", "source": "input", "path": "repayment_amount"}
+      ],
+      "evaluate": "CHIP:repay_loan",
+      "on_allow": [
+        {"type": "decrement", "target": "entities.{loan.borrower}.balance", "amount": {"type": "path", "path": ["repayment_amount"]}},
+        {"type": "decrement", "target": "loans.{loan_id}.amount", "amount": {"type": "path", "path": ["repayment_amount"]}},
+        {"type": "emit", "event": "loan_repaid", "data": {"id": "{loan_id}"}}
+      ],
+      "on_deny": [{"type": "emit", "event": "repayment_denied", "data": {"reason": "{proof.failed_gates}"}}]
+    },
+    {
+      "name": "DefaultLoan",
+      "description": "Mark a loan as defaulted",
+      "inputs": [
+        {"name": "loan_id", "type": "string", "required": true},
+        {"name": "is_overdue", "type": "boolean", "required": true}
+      ],
+      "context": [
+        {"name": "loan", "source": "ledger", "path": "loans.{loan_id}"},
+        {"name": "is_overdue", "source": "input", "path": "is_overdue"}
+      ],
+      "evaluate": "CHIP:default_loan",
+      "on_allow": [
+        {"type": "set", "target": "loans.{loan_id}.status", "value": {"type": "literal", "value": "defaulted"}},
+        {"type": "decrement", "target": "entities.{loan.borrower}.reputation", "amount": {"type": "literal", "value": 50}},
+        {"type": "emit", "event": "loan_defaulted", "data": {"id": "{loan_id}"}}
+      ],
+      "on_deny": [{"type": "emit", "event": "default_denied", "data": {"reason": "{proof.failed_gates}"}}]
+    },
+    {
+      "name": "UpdateReputation",
+      "description": "Update entity reputation (system/arbiter/admin only)",
+      "inputs": [
+        {"name": "entity_id", "type": "string", "required": true},
+        {"name": "caller_id", "type": "string", "required": true},
+        {"name": "change", "type": "number", "required": true}
+      ],
+      "context": [
+        {"name": "caller", "source": "ledger", "path": "entities.{caller_id}"},
+        {"name": "change", "source": "input", "path": "change"}
+      ],
+      "evaluate": "CHIP:update_reputation",
+      "on_allow": [
+        {"type": "increment", "target": "entities.{entity_id}.reputation", "amount": {"type": "path", "path": ["change"]}},
+        {"type": "emit", "event": "reputation_updated", "data": {"id": "{entity_id}"}}
+      ],
+      "on_deny": [{"type": "emit", "event": "reputation_update_denied", "data": {"reason": "{proof.failed_gates}"}}]
+    },
+    {
+      "name": "StakeReputation",
+      "description": "Stake reputation for commitment",
+      "inputs": [
+        {"name": "entity_id", "type": "string", "required": true},
+        {"name": "stake_amount", "type": "number", "required": true}
+      ],
+      "context": [
+        {"name": "entity", "source": "ledger", "path": "entities.{entity_id}"},
+        {"name": "stake_amount", "source": "input", "path": "stake_amount"}
+      ],
+      "evaluate": "CHIP:stake_reputation",
+      "on_allow": [
+        {"type": "decrement", "target": "entities.{entity_id}.reputation", "amount": {"type": "path", "path": ["stake_amount"]}},
+        {"type": "increment", "target": "entities.{entity_id}.staked_reputation", "amount": {"type": "path", "path": ["stake_amount"]}},
+        {"type": "emit", "event": "reputation_staked", "data": {"id": "{entity_id}"}}
+      ],
+      "on_deny": [{"type": "emit", "event": "stake_denied", "data": {"reason": "{proof.failed_gates}"}}]
+    },
+    {
+      "name": "SlashReputation",
+      "description": "Slash staked reputation as penalty",
+      "inputs": [
+        {"name": "entity_id", "type": "string", "required": true},
+        {"name": "slash_amount", "type": "number", "required": true}
+      ],
+      "context": [
+        {"name": "entity", "source": "ledger", "path": "entities.{entity_id}"},
+        {"name": "slash_amount", "source": "input", "path": "slash_amount"}
+      ],
+      "evaluate": "CHIP:slash_reputation",
+      "on_allow": [
+        {"type": "decrement", "target": "entities.{entity_id}.staked_reputation", "amount": {"type": "path", "path": ["slash_amount"]}},
+        {"type": "emit", "event": "reputation_slashed", "data": {"id": "{entity_id}"}}
+      ],
+      "on_deny": [{"type": "emit", "event": "slash_denied", "data": {"reason": "{proof.failed_gates}"}}]
+    },
+    {
+      "name": "RegisterAsset",
+      "description": "Register a new asset",
+      "inputs": [
+        {"name": "asset_id", "type": "string", "required": true},
+        {"name": "owner_id", "type": "string", "required": true},
+        {"name": "asset_type", "type": "string", "required": true}
+      ],
+      "context": [{"name": "owner", "source": "ledger", "path": "entities.{owner_id}"}],
+      "evaluate": "CHIP:register_asset",
+      "on_allow": [
+        {"type": "create", "entity_type": "assets", "id": {"type": "path", "path": ["input", "asset_id"]}, "data": {"owner": "{owner_id}", "type": "{asset_type}", "locked": false, "created_at": "{now}"}},
+        {"type": "emit", "event": "asset_registered", "data": {"id": "{asset_id}"}}
+      ],
+      "on_deny": [{"type": "emit", "event": "asset_registration_denied", "data": {"reason": "{proof.failed_gates}"}}]
+    },
+    {
+      "name": "TransferAsset",
+      "description": "Transfer asset ownership",
+      "inputs": [
+        {"name": "asset_id", "type": "string", "required": true},
+        {"name": "caller_id", "type": "string", "required": true},
+        {"name": "recipient_id", "type": "string", "required": true}
+      ],
+      "context": [
+        {"name": "asset", "source": "ledger", "path": "assets.{asset_id}"},
+        {"name": "caller_id", "source": "input", "path": "caller_id"}
+      ],
+      "evaluate": "CHIP:transfer_asset",
+      "on_allow": [
+        {"type": "set", "target": "assets.{asset_id}.owner", "value": {"type": "path", "path": ["input", "recipient_id"]}},
+        {"type": "emit", "event": "asset_transferred", "data": {"id": "{asset_id}"}}
+      ],
+      "on_deny": [{"type": "emit", "event": "asset_transfer_denied", "data": {"reason": "{proof.failed_gates}"}}]
+    },
+    {
+      "name": "LockAsset",
+      "description": "Lock an asset",
+      "inputs": [
+        {"name": "asset_id", "type": "string", "required": true},
+        {"name": "caller_id", "type": "string", "required": true}
+      ],
+      "context": [
+        {"name": "asset", "source": "ledger", "path": "assets.{asset_id}"},
+        {"name": "caller_id", "source": "input", "path": "caller_id"}
+      ],
+      "evaluate": "CHIP:lock_asset",
+      "on_allow": [
+        {"type": "set", "target": "assets.{asset_id}.locked", "value": {"type": "literal", "value": true}},
+        {"type": "emit", "event": "asset_locked", "data": {"id": "{asset_id}"}}
+      ],
+      "on_deny": [{"type": "emit", "event": "asset_lock_denied", "data": {"reason": "{proof.failed_gates}"}}]
+    },
+    {
+      "name": "UnlockAsset",
+      "description": "Unlock an asset",
+      "inputs": [
+        {"name": "asset_id", "type": "string", "required": true},
+        {"name": "caller_id", "type": "string", "required": true}
+      ],
+      "context": [
+        {"name": "asset", "source": "ledger", "path": "assets.{asset_id}"},
+        {"name": "caller_id", "source": "input", "path": "caller_id"}
+      ],
+      "evaluate": "CHIP:unlock_asset",
+      "on_allow": [
+        {"type": "set", "target": "assets.{asset_id}.locked", "value": {"type": "literal", "value": false}},
+        {"type": "emit", "event": "asset_unlocked", "data": {"id": "{asset_id}"}}
+      ],
+      "on_deny": [{"type": "emit", "event": "asset_unlock_denied", "data": {"reason": "{proof.failed_gates}"}}]
+    },
+    {
+      "name": "CreateInvoice",
+      "description": "Create an invoice",
+      "inputs": [
+        {"name": "invoice_id", "type": "string", "required": true},
+        {"name": "issuer_id", "type": "string", "required": true},
+        {"name": "recipient_id", "type": "string", "required": true},
+        {"name": "amount", "type": "number", "required": true}
+      ],
+      "context": [{"name": "issuer", "source": "ledger", "path": "entities.{issuer_id}"}],
+      "evaluate": "CHIP:create_invoice",
+      "on_allow": [
+        {"type": "create", "entity_type": "invoices", "id": {"type": "path", "path": ["input", "invoice_id"]}, "data": {"issuer": "{issuer_id}", "recipient": "{recipient_id}", "amount": "{amount}", "status": "pending", "created_at": "{now}"}},
+        {"type": "emit", "event": "invoice_created", "data": {"id": "{invoice_id}"}}
+      ],
+      "on_deny": [{"type": "emit", "event": "invoice_creation_denied", "data": {"reason": "{proof.failed_gates}"}}]
+    },
+    {
+      "name": "PayInvoice",
+      "description": "Pay an invoice",
+      "inputs": [
+        {"name": "invoice_id", "type": "string", "required": true},
+        {"name": "payer_id", "type": "string", "required": true}
+      ],
+      "context": [
+        {"name": "invoice", "source": "ledger", "path": "invoices.{invoice_id}"},
+        {"name": "payer", "source": "ledger", "path": "entities.{payer_id}"}
+      ],
+      "evaluate": "CHIP:pay_invoice",
+      "on_allow": [
+        {"type": "decrement", "target": "entities.{payer_id}.balance", "amount": {"type": "path", "path": ["invoice", "amount"]}},
+        {"type": "increment", "target": "entities.{invoice.issuer}.balance", "amount": {"type": "path", "path": ["invoice", "amount"]}},
+        {"type": "set", "target": "invoices.{invoice_id}.status", "value": {"type": "literal", "value": "paid"}},
+        {"type": "emit", "event": "invoice_paid", "data": {"id": "{invoice_id}"}}
+      ],
+      "on_deny": [{"type": "emit", "event": "invoice_payment_denied", "data": {"reason": "{proof.failed_gates}"}}]
+    },
+    {
+      "name": "DisputeInvoice",
+      "description": "Dispute an invoice",
+      "inputs": [
+        {"name": "invoice_id", "type": "string", "required": true},
+        {"name": "caller_id", "type": "string", "required": true},
+        {"name": "reason", "type": "string", "required": true}
+      ],
+      "context": [
+        {"name": "invoice", "source": "ledger", "path": "invoices.{invoice_id}"},
+        {"name": "caller_id", "source": "input", "path": "caller_id"}
+      ],
+      "evaluate": "CHIP:dispute_invoice",
+      "on_allow": [
+        {"type": "set", "target": "invoices.{invoice_id}.status", "value": {"type": "literal", "value": "disputed"}},
+        {"type": "emit", "event": "invoice_disputed", "data": {"id": "{invoice_id}"}}
+      ],
+      "on_deny": [{"type": "emit", "event": "invoice_dispute_denied", "data": {"reason": "{proof.failed_gates}"}}]
+    },
+    {
+      "name": "CreateShadow",
+      "description": "Create a shadow entity for external platform",
+      "inputs": [
+        {"name": "shadow_id", "type": "string", "required": true},
+        {"name": "creator_id", "type": "string", "required": true},
+        {"name": "external_id", "type": "string", "required": true},
+        {"name": "platform", "type": "string", "required": true}
+      ],
+      "context": [
+        {"name": "creator", "source": "ledger", "path": "entities.{creator_id}"},
+        {"name": "external_id", "source": "input", "path": "external_id"}
+      ],
+      "evaluate": "CHIP:create_shadow",
+      "on_allow": [
+        {"type": "create", "entity_type": "shadows", "id": {"type": "path", "path": ["input", "shadow_id"]}, "data": {"creator": "{creator_id}", "external_id": "{external_id}", "platform": "{platform}", "merged_to": null, "created_at": "{now}"}},
+        {"type": "emit", "event": "shadow_created", "data": {"id": "{shadow_id}"}}
+      ],
+      "on_deny": [{"type": "emit", "event": "shadow_creation_denied", "data": {"reason": "{proof.failed_gates}"}}]
+    },
+    {
+      "name": "MergeShadow",
+      "description": "Merge shadow entity to real entity",
+      "inputs": [
+        {"name": "shadow_id", "type": "string", "required": true},
+        {"name": "real_entity_id", "type": "string", "required": true},
+        {"name": "proof", "type": "string", "required": true}
+      ],
+      "context": [
+        {"name": "shadow", "source": "ledger", "path": "shadows.{shadow_id}"},
+        {"name": "real_entity", "source": "ledger", "path": "entities.{real_entity_id}"}
+      ],
+      "evaluate": "CHIP:merge_shadow",
+      "on_allow": [
+        {"type": "set", "target": "shadows.{shadow_id}.merged_to", "value": {"type": "path", "path": ["input", "real_entity_id"]}},
+        {"type": "emit", "event": "shadow_merged", "data": {"shadow": "{shadow_id}", "entity": "{real_entity_id}"}}
+      ],
+      "on_deny": [{"type": "emit", "event": "merge_denied", "data": {"reason": "{proof.failed_gates}"}}]
+    },
+    {
+      "name": "CreateWorkspace",
+      "description": "Create a workspace",
+      "inputs": [
+        {"name": "workspace_id", "type": "string", "required": true},
+        {"name": "owner_id", "type": "string", "required": true},
+        {"name": "name", "type": "string", "required": true}
+      ],
+      "context": [{"name": "owner", "source": "ledger", "path": "entities.{owner_id}"}],
+      "evaluate": "CHIP:create_workspace",
+      "on_allow": [
+        {"type": "create", "entity_type": "workspaces", "id": {"type": "path", "path": ["input", "workspace_id"]}, "data": {"owner": "{owner_id}", "name": "{name}", "status": "active", "created_at": "{now}"}},
+        {"type": "emit", "event": "workspace_created", "data": {"id": "{workspace_id}"}}
+      ],
+      "on_deny": [{"type": "emit", "event": "workspace_creation_denied", "data": {"reason": "{proof.failed_gates}"}}]
+    },
+    {
+      "name": "ArchiveWorkspace",
+      "description": "Archive a workspace",
+      "inputs": [
+        {"name": "workspace_id", "type": "string", "required": true},
+        {"name": "caller_id", "type": "string", "required": true}
+      ],
+      "context": [
+        {"name": "workspace", "source": "ledger", "path": "workspaces.{workspace_id}"},
+        {"name": "caller_id", "source": "input", "path": "caller_id"}
+      ],
+      "evaluate": "CHIP:archive_workspace",
+      "on_allow": [
+        {"type": "set", "target": "workspaces.{workspace_id}.status", "value": {"type": "literal", "value": "archived"}},
+        {"type": "emit", "event": "workspace_archived", "data": {"id": "{workspace_id}"}}
+      ],
+      "on_deny": [{"type": "emit", "event": "archive_denied", "data": {"reason": "{proof.failed_gates}"}}]
+    },
+    {
+      "name": "ExportWorkspace",
+      "description": "Export workspace data",
+      "inputs": [
+        {"name": "workspace_id", "type": "string", "required": true},
+        {"name": "caller_id", "type": "string", "required": true},
+        {"name": "format", "type": "string", "required": true}
+      ],
+      "context": [
+        {"name": "workspace", "source": "ledger", "path": "workspaces.{workspace_id}"},
+        {"name": "caller_id", "source": "input", "path": "caller_id"}
+      ],
+      "evaluate": "CHIP:export_workspace",
+      "on_allow": [
+        {"type": "emit", "event": "workspace_exported", "data": {"id": "{workspace_id}", "format": "{format}"}}
+      ],
+      "on_deny": [{"type": "emit", "event": "export_denied", "data": {"reason": "{proof.failed_gates}"}}]
+    }
+  ]
+}

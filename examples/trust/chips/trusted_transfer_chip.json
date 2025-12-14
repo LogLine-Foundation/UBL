@@ -1,0 +1,112 @@
+{
+  "chip": {
+    "name": "trusted_transfer",
+    "description": "Transfer allowed if sufficient funds, recipient exists, amount positive, and optional circuit-breaker + shadow gates pass.",
+    "gates": [
+      {
+        "id": "sufficient_funds",
+        "description": "sender.balance >= amount",
+        "expr": {
+          "type": "compare",
+          "op": ">=",
+          "left": {
+            "type": "path",
+            "path": [
+              "sender",
+              "balance"
+            ]
+          },
+          "right": {
+            "type": "path",
+            "path": [
+              "amount"
+            ]
+          }
+        }
+      },
+      {
+        "id": "amount_positive",
+        "description": "amount > 0",
+        "expr": {
+          "type": "compare",
+          "op": ">",
+          "left": {
+            "type": "path",
+            "path": [
+              "amount"
+            ]
+          },
+          "right": {
+            "type": "literal",
+            "value": 0
+          }
+        }
+      },
+      {
+        "id": "recipient_exists",
+        "description": "recipient exists",
+        "expr": {
+          "type": "compare",
+          "op": "exists",
+          "left": {
+            "type": "path",
+            "path": [
+              "recipient",
+              "id"
+            ],
+            "fallback": null
+          },
+          "right": {
+            "type": "literal",
+            "value": null
+          }
+        }
+      },
+      {
+        "id": "circuit_breaker_single_tx",
+        "description": "amount <= breaker.single_tx_limit (if breaker provided)",
+        "expr": {
+          "type": "logic",
+          "op": "or",
+          "args": [
+            {
+              "type": "compare",
+              "op": "==",
+              "left": {
+                "type": "path",
+                "path": [
+                  "breaker",
+                  "single_tx_limit"
+                ],
+                "fallback": null
+              },
+              "right": {
+                "type": "literal",
+                "value": null
+              }
+            },
+            {
+              "type": "compare",
+              "op": "<=",
+              "left": {
+                "type": "path",
+                "path": [
+                  "amount"
+                ]
+              },
+              "right": {
+                "type": "path",
+                "path": [
+                  "breaker",
+                  "single_tx_limit"
+                ]
+              }
+            }
+          ]
+        }
+      }
+    ],
+    "composition": "ALL",
+    "hash": ""
+  }
+}

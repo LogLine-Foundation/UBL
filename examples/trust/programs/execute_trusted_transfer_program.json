@@ -1,0 +1,88 @@
+{
+  "program": {
+    "name": "ExecuteTrustedTransfer",
+    "description": "Example: execute transfer with trust gates (breaker + shadow).",
+    "inputs": [
+      {
+        "name": "from_id",
+        "type": "string",
+        "required": true
+      },
+      {
+        "name": "to_id",
+        "type": "string",
+        "required": true
+      },
+      {
+        "name": "amount",
+        "type": "number",
+        "required": true
+      }
+    ],
+    "context": [
+      {
+        "name": "sender",
+        "source": "ledger",
+        "path": "wallets.{from_id}"
+      },
+      {
+        "name": "recipient",
+        "source": "ledger",
+        "path": "wallets.{to_id}"
+      },
+      {
+        "name": "breaker",
+        "source": "ledger",
+        "path": "breakers.{from_id}"
+      },
+      {
+        "name": "amount",
+        "source": "input",
+        "path": "amount"
+      }
+    ],
+    "evaluate": "<FILL_WITH_HASH_OF_trusted_transfer_chip>",
+    "on_allow": [
+      {
+        "type": "decrement",
+        "target": "wallets.{from_id}.balance",
+        "amount": {
+          "type": "path",
+          "path": [
+            "amount"
+          ]
+        }
+      },
+      {
+        "type": "increment",
+        "target": "wallets.{to_id}.balance",
+        "amount": {
+          "type": "path",
+          "path": [
+            "amount"
+          ]
+        }
+      },
+      {
+        "type": "emit",
+        "event": "trusted_transfer_success",
+        "data": {
+          "tx_id": "{tx_id}",
+          "timestamp": "{now}"
+        }
+      }
+    ],
+    "on_deny": [
+      {
+        "type": "emit",
+        "event": "trusted_transfer_denied",
+        "data": {
+          "reason": "{proof.failed_gates}",
+          "tx_id": "{tx_id}",
+          "timestamp": "{now}"
+        }
+      }
+    ],
+    "hash": ""
+  }
+}
